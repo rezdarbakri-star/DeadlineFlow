@@ -1390,6 +1390,20 @@ body {
 
 <script>
 // ===== FIREBASE INIT =====
+if (typeof firebase === 'undefined') {
+  document.getElementById('loginScreen').innerHTML = `
+    <div class="logo-big" style="background:var(--danger);">!</div>
+    <h1 style="background:none;-webkit-text-fill-color:var(--text-primary);">Firebase kunde inte laddas</h1>
+    <p>Scripten blockeras av din webbläsare eller miljö. Du behöver köra appen via en webbserver.<br><br>
+    <strong>Snabbaste sättet:</strong><br>
+    1. Öppna terminal i mappen med filen<br>
+    2. Kör: <code style="background:var(--bg-card);padding:2px 8px;border-radius:4px;">npx serve .</code><br>
+    3. Öppna <code style="background:var(--bg-card);padding:2px 8px;border-radius:4px;">http://localhost:3000</code><br><br>
+    Eller deploya via GitHub → Vercel/Netlify.</p>
+  `;
+  throw new Error('Firebase scripts blocked — run via a web server');
+}
+
 firebase.initializeApp({
   apiKey: "AIzaSyBMLWZ8bEDPcQuMk3crNzO80J5UzciD82E",
   authDomain: "deadlineflow-20f74.firebaseapp.com",
@@ -1410,14 +1424,19 @@ let googleAccessToken = null;
 
 // ===== AUTH =====
 function doGoogleLogin() {
-  auth.signInWithPopup(googleProvider).then(result => {
-    // Get the Google OAuth access token for Calendar API
-    googleAccessToken = result.credential.accessToken;
-  }).catch(err => {
-    console.error('Login error:', err);
-    showToast('❌ Inloggning misslyckades: ' + err.message);
-  });
+  // Use redirect instead of popup to avoid COOP issues on GitHub Pages
+  auth.signInWithRedirect(googleProvider);
 }
+
+// Check for redirect result on page load
+auth.getRedirectResult().then(result => {
+  if (result && result.credential) {
+    googleAccessToken = result.credential.accessToken;
+    console.log('✅ Calendar access token hämtad via redirect');
+  }
+}).catch(err => {
+  console.error('Redirect result error:', err);
+});
 
 function doGoogleLogout() {
   if (!confirm('Logga ut?')) return;
@@ -2353,14 +2372,35 @@ async function getGoogleToken() {
   // If we already have a token from login, use it
   if (googleAccessToken) return googleAccessToken;
 
-  // Otherwise re-auth with popup to get a fresh token with calendar scope
+  // No token from redirect — need to sign in again to get Calendar scope token
+  // Use popup here since user is already authenticated, this is just for the token
+  showToast('📅 Hämtar Calendar-åtkomst...');
   try {
-    const result = await auth.currentUser.reauthenticateWithPopup(googleProvider);
+    const result = await auth.currentUser.linkWithPopup(googleProvider);
     googleAccessToken = result.credential.accessToken;
     return googleAccessToken;
   } catch (e) {
-    console.error('Re-auth failed:', e);
-    showToast('❌ Kunde inte hämta Google Calendar-åtkomst. Försök logga ut och in igen.');
+    // If already linked, try re-auth
+    if (e.code === 'auth/credential-already-in-use' || e.code === 'auth/provider-already-linked') {
+      try {
+        const result = await auth.currentUser.reauthenticateWithPopup(googleProvider);
+        googleAccessToken = result.credential.accessToken;
+        return googleAccessToken;
+      } catch (e2) {
+        console.error('Re-auth failed:', e2);
+      }
+    }
+    // Last resort: full sign-in popup
+    try {
+      const result = await auth.signInWithPopup(googleProvider);
+      if (result.credential) {
+        googleAccessToken = result.credential.accessToken;
+        return googleAccessToken;
+      }
+    } catch (e3) {
+      console.error('Full sign-in failed:', e3);
+    }
+    showToast('❌ Kunde inte hämta Calendar-åtkomst. Testa logga ut och in igen.');
     return null;
   }
 }

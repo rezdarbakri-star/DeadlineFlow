@@ -2058,6 +2058,8 @@ function renderPipelineCard(project) {
                     onclick="exportProjectICS('${project.id}')">📄 .ics</button>
             <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 11px; border-color: #4285f4; color: #4285f4;"
                     onclick="pushProjectToGoogleCalendar('${project.id}')">📅 Google Cal</button>
+            <button class="btn btn-danger" style="padding: 4px 10px; font-size: 11px;"
+                    onclick="deleteProject('${project.id}')">🗑</button>
           </div>
         </div>
       </div>
@@ -2411,6 +2413,20 @@ async function deleteClient(clientId) {
   await saveData();
   switchView('dashboard');
   showToast('Kund borttagen');
+}
+
+async function deleteProject(projectId) {
+  const project = appData.projects.find(p => p.id === projectId);
+  if (!project) return;
+  const client = appData.clients.find(c => c.id === project.clientId);
+  const clientName = client ? client.name : '';
+
+  if (!confirm(`Ta bort projektet "${project.name}" (${clientName})?\n\nOBS: Eventuella events i Google Calendar tas inte bort automatiskt.`)) return;
+
+  appData.projects = appData.projects.filter(p => p.id !== projectId);
+  await saveData();
+  renderView();
+  showToast('🗑 Projekt borttaget');
 }
 
 // === TEMPLATES ===

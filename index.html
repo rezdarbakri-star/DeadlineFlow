@@ -2432,7 +2432,7 @@ async function pushProjectToGoogleCalendar(projectId) {
   const clientName = client ? client.name : 'Kund';
 
   const reminderMinutesMap = {
-    'same': 0,
+    'same': 5,         // Google doesn't allow 0, use 5 min as "same day"
     '1day': 1440,
     '3days': 4320,
     '7days': 10080,
@@ -2440,11 +2440,20 @@ async function pushProjectToGoogleCalendar(projectId) {
   };
 
   const reminders = (project.reminders || ['same', '1day', '3days']);
-  const reminderOverrides = reminders.map(r => ({
-    method: 'email', minutes: reminderMinutesMap[r]
-  })).concat(reminders.map(r => ({
-    method: 'popup', minutes: reminderMinutesMap[r]
-  })));
+  // Build overrides — max 5 total allowed by Google
+  let reminderOverrides = [];
+  reminders.forEach(r => {
+    const mins = reminderMinutesMap[r];
+    if (mins !== undefined) {
+      reminderOverrides.push({ method: 'email', minutes: mins });
+    }
+  });
+  // Add one popup reminder for the nearest one
+  if (reminders.length > 0) {
+    reminderOverrides.push({ method: 'popup', minutes: reminderMinutesMap[reminders[0]] || 5 });
+  }
+  // Google allows max 5 overrides
+  reminderOverrides = reminderOverrides.slice(0, 5);
 
   const stepsToSync = project.steps.filter(s => !s.completed);
 
@@ -2544,4 +2553,4 @@ document.addEventListener('keydown', e => {
 });
 </script>
 </body>
-</html> 
+</html>

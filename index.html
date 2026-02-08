@@ -1423,16 +1423,32 @@ let currentUser = null;
 let googleAccessToken = null;
 
 // ===== AUTH =====
-function doGoogleLogin() {
-  // Use redirect instead of popup to avoid COOP issues on GitHub Pages
-  auth.signInWithRedirect(googleProvider);
+async function doGoogleLogin() {
+  try {
+    const result = await auth.signInWithPopup(googleProvider);
+    if (result.credential) {
+      googleAccessToken = result.credential.accessToken;
+      console.log('✅ Calendar token hämtad vid inloggning');
+    } else {
+      console.warn('⚠️ Ingen credential returnerad — Calendar-token hämtas vid push');
+    }
+  } catch (err) {
+    console.error('Login error:', err);
+    // If popup blocked, fall back to redirect
+    if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
+      showToast('Popup blockerad — omdirigerar...');
+      auth.signInWithRedirect(googleProvider);
+    } else {
+      showToast('❌ Inloggning misslyckades: ' + err.message);
+    }
+  }
 }
 
-// Check for redirect result on page load
+// Also check for redirect result (fallback)
 auth.getRedirectResult().then(result => {
   if (result && result.credential) {
     googleAccessToken = result.credential.accessToken;
-    console.log('✅ Calendar access token hämtad via redirect');
+    console.log('✅ Calendar token hämtad via redirect');
   }
 }).catch(err => {
   console.error('Redirect result error:', err);

@@ -2430,13 +2430,21 @@ async function pushProjectToGoogleCalendar(projectId) {
     method: 'popup', minutes: reminderMinutesMap[r]
   })));
 
-  showToast(`📅 Pushar ${project.steps.length} events till Google Calendar...`);
+  const stepsToSync = project.steps.filter(s => !s.completed);
+
+  if (stepsToSync.length === 0) {
+    showToast('Alla steg är redan avklarade — inget att pusha.');
+    return;
+  }
+
+  showToast(`📅 Pushar ${stepsToSync.length} events till Google Calendar...`);
 
   let successCount = 0;
   let errorCount = 0;
 
-  for (let idx = 0; idx < project.steps.length; idx++) {
-    const step = project.steps[idx];
+  for (let i = 0; i < stepsToSync.length; i++) {
+    const step = stepsToSync[i];
+    const idx = project.steps.indexOf(step);
     const isDeadline = idx === project.steps.length - 1;
     const emoji = isDeadline ? '🎯 ' : '';
 
@@ -2465,7 +2473,7 @@ async function pushProjectToGoogleCalendar(projectId) {
         const newToken = await getGoogleToken();
         if (!newToken) return;
         // Retry this event
-        idx--;
+        i--;
         continue;
       }
 
@@ -2481,7 +2489,7 @@ async function pushProjectToGoogleCalendar(projectId) {
       errorCount++;
     }
 
-    if (idx < project.steps.length - 1) {
+    if (i < stepsToSync.length - 1) {
       await new Promise(r => setTimeout(r, 150));
     }
   }

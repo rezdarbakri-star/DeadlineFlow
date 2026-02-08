@@ -1245,14 +1245,11 @@ body {
     <div class="topbar-actions">
       <span class="topbar-date" id="syncStatus" style="font-size:11px;cursor:help;">☁️ Synkad</span>
       <span class="topbar-date" id="currentDate"></span>
-      <button class="btn btn-secondary" onclick="resetAllData()" style="padding: 6px 12px; font-size: 11px; color: var(--text-muted);" title="Återställ all data">⟲</button>
       <button class="btn btn-primary" onclick="openNewProjectModal()" style="padding: 8px 18px; font-size: 13px;">+ Nytt projekt</button>
-      <div id="userAvatarContainer" style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="doGoogleLogout()">
+      <div id="userAvatarContainer" style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="doGoogleLogout()" title="Klicka för att logga ut">
         <img id="userAvatar" src="" style="width:30px;height:30px;border-radius:50%;border:2px solid var(--border);">
         <span id="userName" style="font-size:12px;color:var(--text-secondary);"></span>
       </div>
-      <button class="btn btn-secondary" onclick="resetAllData()" style="padding: 6px 12px; font-size: 11px; color: var(--text-muted);" title="Återställ all data">⟲</button>
-      <button class="btn btn-primary" onclick="openNewProjectModal()" style="padding: 8px 18px; font-size: 13px;">+ Nytt projekt</button>
     </div>
   </header>
 
@@ -1276,6 +1273,10 @@ body {
       <h3>Kunder</h3>
       <div id="clientList"></div>
       <button class="add-btn" onclick="openNewClientModal()">+ Lägg till kund</button>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:auto;">
+      <button class="add-btn" onclick="resetAllData()" style="color:var(--danger);border-color:var(--border);font-size:11px;opacity:0.5;">⟲ Återställ all data</button>
     </div>
   </aside>
 
@@ -1328,10 +1329,9 @@ body {
     <div class="modal-footer" style="flex-wrap: wrap; gap: 8px;">
       <button class="btn btn-secondary" onclick="previewProject()">Förhandsvisa</button>
       <div style="flex:1;"></div>
-      <button class="btn btn-secondary" onclick="saveProject('ics')" style="font-size:12px;">📄 Spara & .ics</button>
-      <button class="btn btn-primary" onclick="saveProject('google')" id="saveGoogleBtn">
-        <span style="display:flex;align-items:center;gap:8px;">📅 Skapa & Push till Google Calendar</span>
-      </button>
+      <button class="btn btn-primary" onclick="saveProject('save')" style="font-size:13px;">💾 Spara projekt</button>
+      <button class="btn btn-secondary" onclick="saveProject('ics')" style="font-size:12px;">📄 .ics-fil</button>
+      <button class="btn btn-secondary" onclick="saveProject('google')" style="font-size:12px; border-color: #4285f4; color: #4285f4;">📅 Spara & Push Calendar</button>
     </div>
   </div>
 </div>
@@ -1598,7 +1598,16 @@ async function saveData() {
 }
 
 async function resetAllData() {
-  if (!confirm('⚠️ Är du säker? Detta raderar ALL data — kunder, projekt och mallar. Kan ej ångras.')) return;
+  if (!confirm('⚠️ VARNING: Du är på väg att radera ALL data — kunder, projekt och mallar.\n\nDenna åtgärd kan INTE ångras.\n\nVill du fortsätta?')) return;
+
+  const confirmation = prompt('Skriv "RADERA" för att bekräfta:');
+  if (confirmation !== 'RADERA') {
+    showToast('Avbrutet — data orörd.');
+    return;
+  }
+
+  if (!confirm('Sista chansen — all data raderas permanent. Är du helt säker?')) return;
+
   appData = getDefaultData();
   await saveData();
   renderView();
@@ -2125,7 +2134,7 @@ function previewProject() {
   document.getElementById('generatedPreview').style.display = 'block';
 }
 
-async function saveProject(mode = 'google') {
+async function saveProject(mode = 'save') {
   const clientId = document.getElementById('projectClient').value;
   const templateId = document.getElementById('projectTemplate').value;
   const name = document.getElementById('projectName').value;
@@ -2159,9 +2168,11 @@ async function saveProject(mode = 'google') {
 
   if (mode === 'google') {
     await pushProjectToGoogleCalendar(project.id);
-  } else {
+  } else if (mode === 'ics') {
     exportProjectICS(project.id);
     showToast('✅ Projekt skapat & .ics nedladdad!', 'success');
+  } else {
+    showToast('✅ Projekt sparat!', 'success');
   }
 }
 
@@ -2479,14 +2490,13 @@ async function pushProjectToGoogleCalendar(projectId) {
   selectedReminders.forEach(r => {
     const mins = reminderMinutesMap[r];
     if (mins !== undefined) {
-      reminderOverrides.push({ method: 'email', minutes: mins === 0 ? 0 : mins });
+      // For "same day": event is at 09:00, so 0 min = email at 09:00
+      // For others: email X minutes before 09:00
+      reminderOverrides.push({ method: 'email', minutes: mins });
+      reminderOverrides.push({ method: 'popup', minutes: mins });
     }
   });
-  // Add popup for same-day
-  if (selectedReminders.includes('same')) {
-    reminderOverrides.push({ method: 'popup', minutes: 0 });
-  }
-  // Filter: Google requires minutes >= 0 and max 5 overrides, 0 is allowed for timed events
+  // Google allows max 5 overrides
   reminderOverrides = reminderOverrides.slice(0, 5);
 
   showToast(`📅 Pushar ${stepsToSync.length} events till Google Calendar...`);
@@ -2585,4 +2595,3 @@ document.addEventListener('keydown', e => {
 </script>
 </body>
 </html>
-

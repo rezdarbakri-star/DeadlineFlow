@@ -1215,10 +1215,197 @@ body {
 .toast.success { border-color: var(--success); }
 
 /* ===== RESPONSIVE ===== */
+/* ===== MOBILE MENU BUTTON ===== */
+.mobile-menu-btn {
+  display: none;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  font-size: 18px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 199;
+}
+
 @media (max-width: 900px) {
-  .app-container { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
-  .dashboard-stats { grid-template-columns: repeat(2, 1fr); }
+  .app-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: 56px 1fr;
+  }
+
+  /* Topbar mobile */
+  .topbar {
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .topbar-logo h1 { font-size: 15px; }
+  .topbar-logo .logo-icon { width: 28px; height: 28px; font-size: 13px; }
+
+  .topbar-actions { gap: 6px; }
+  .topbar-actions .topbar-date#syncStatus { display: none; }
+  .topbar-actions .topbar-date#currentDate { display: none; }
+  .topbar-actions #userName { display: none; }
+  .topbar-actions #userAvatar { width: 26px; height: 26px; }
+
+  .mobile-menu-btn { display: flex; }
+
+  .topbar-actions .btn-primary {
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+  }
+
+  /* Sidebar as drawer */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -300px;
+    width: 280px;
+    height: 100vh;
+    z-index: 200;
+    transition: left 0.3s ease;
+    box-shadow: none;
+  }
+
+  .sidebar.open {
+    left: 0;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+  }
+
+  .sidebar-overlay.open {
+    display: block;
+  }
+
+  /* Main content */
+  .main-content { padding: 16px 12px; }
+
+  /* Dashboard stats */
+  .dashboard-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card { padding: 14px; }
+  .stat-card .stat-value { font-size: 22px; }
+  .stat-card .stat-label { font-size: 11px; }
+
+  /* Section headers */
+  .section-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .section-header .filter-tabs { width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+  .filter-tab { white-space: nowrap; flex-shrink: 0; }
+
+  /* Task cards */
+  .task-card {
+    grid-template-columns: 20px 1fr auto;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .task-time { display: none; }
+  .task-name { font-size: 13px; }
+  .task-client { font-size: 10px; }
+  .task-status { font-size: 10px; padding: 3px 8px; }
+
+  /* Pipeline cards */
+  .pipeline-card { padding: 14px; }
+  .pipeline-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+
+  .pipeline-steps {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 12px;
+    scrollbar-width: thin;
+  }
+
+  .pipeline-step-node { min-width: 80px; padding: 8px 4px; }
+  .pipeline-step-label { font-size: 9px; max-width: 70px; }
+  .pipeline-step-date { font-size: 9px; }
+
+  /* Modals */
+  .modal {
+    width: 95vw;
+    max-height: 90vh;
+    border-radius: 16px;
+    margin: 0 8px;
+  }
+
+  .modal-header { padding: 18px 18px 0; }
+  .modal-header h2 { font-size: 17px; }
+  .modal-body { padding: 18px; }
+  .modal-footer { padding: 0 18px 18px; flex-wrap: wrap; }
+  .modal-footer .btn { flex: 1; min-width: 120px; text-align: center; font-size: 12px !important; padding: 10px 12px; }
+
+  .form-row { grid-template-columns: 1fr; }
+  .form-input, .form-select { font-size: 16px; } /* Prevents iOS zoom */
+
+  .reminder-config { gap: 6px; }
+  .reminder-chip { font-size: 11px; padding: 5px 10px; }
+
+  /* Template steps in modal */
+  .template-step {
+    grid-template-columns: 20px 1fr 60px 28px;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .step-name-input { font-size: 12px; }
+  .step-days-input { font-size: 11px; }
+
+  /* Templates grid */
+  .templates-grid { grid-template-columns: 1fr; gap: 12px; }
+  .template-card { padding: 16px; }
+
+  /* Client detail */
+  .client-detail-header { flex-wrap: wrap; gap: 12px; }
+  .client-detail-header h2 { font-size: 20px; }
+  .client-detail-color { width: 40px; height: 40px; }
+
+  /* Color picker */
+  .color-option { width: 28px; height: 28px; }
+
+  /* Preview steps */
+  .preview-step { font-size: 12px; gap: 8px; }
+  .preview-step .preview-date { min-width: 70px; font-size: 11px; }
+
+  /* Toast */
+  .toast {
+    left: 12px;
+    right: 12px;
+    bottom: 16px;
+    font-size: 13px;
+    padding: 12px 16px;
+  }
+
+  /* Login screen mobile */
+  .login-screen { padding: 24px; }
+  .login-screen .logo-big { width: 56px; height: 56px; font-size: 24px; border-radius: 16px; }
+  .login-screen h1 { font-size: 26px; }
+  .login-screen p { font-size: 14px; }
+  .login-btn-google { font-size: 15px; padding: 12px 24px; }
+
+  /* Empty state */
+  .empty-state { padding: 40px 16px; }
+  .empty-state .empty-icon { font-size: 36px; }
+  .empty-state h3 { font-size: 16px; }
+  .empty-state p { font-size: 13px; }
+}
+
+@media (max-width: 400px) {
+  .dashboard-stats { grid-template-columns: 1fr; }
+  .stat-card { padding: 12px; }
+  .modal-footer .btn { min-width: 100%; }
 }
 </style>
 </head>
@@ -1239,6 +1426,7 @@ body {
   <!-- TOP BAR -->
   <header class="topbar">
     <div class="topbar-logo">
+      <button class="mobile-menu-btn" onclick="toggleMobileSidebar()">☰</button>
       <div class="logo-icon">DF</div>
       <h1>DeadlineFlow</h1>
     </div>
@@ -1253,8 +1441,11 @@ body {
     </div>
   </header>
 
+  <!-- SIDEBAR OVERLAY (mobile) -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleMobileSidebar()"></div>
+
   <!-- SIDEBAR -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="sidebar-section">
       <h3>Översikt</h3>
       <div class="nav-item active" data-view="dashboard" onclick="switchView('dashboard')">
@@ -1676,6 +1867,7 @@ function switchView(view, clientId = null) {
   const navItem = document.querySelector(`.nav-item[data-view="${view}"]`);
   if (navItem) navItem.classList.add('active');
 
+  closeMobileSidebar();
   renderView();
 }
 
@@ -2578,6 +2770,21 @@ function showToast(msg, type = '') {
 // ===== INIT =====
 // Auth state listener in Firebase section handles app startup.
 // These are just the event listeners:
+
+// ===== MOBILE SIDEBAR =====
+function toggleMobileSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('open');
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  sidebar.classList.remove('open');
+  overlay.classList.remove('open');
+}
 
 // Close modals on overlay click
 document.querySelectorAll('.modal-overlay').forEach(overlay => {

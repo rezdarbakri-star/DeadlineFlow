@@ -2431,36 +2431,63 @@ async function pushProjectToGoogleCalendar(projectId) {
   const client = appData.clients.find(c => c.id === project.clientId);
   const clientName = client ? client.name : 'Kund';
 
-  const reminderMinutesMap = {
-    'same': 5,         // Google doesn't allow 0, use 5 min as "same day"
-    '1day': 1440,
-    '3days': 4320,
-    '7days': 10080,
-    '14days': 20160,
-  };
-
-  const reminders = (project.reminders || ['same', '1day', '3days']);
-  // Build overrides — max 5 total allowed by Google
-  let reminderOverrides = [];
-  reminders.forEach(r => {
-    const mins = reminderMinutesMap[r];
-    if (mins !== undefined) {
-      reminderOverrides.push({ method: 'email', minutes: mins });
-    }
-  });
-  // Add one popup reminder for the nearest one
-  if (reminders.length > 0) {
-    reminderOverrides.push({ method: 'popup', minutes: reminderMinutesMap[reminders[0]] || 5 });
-  }
-  // Google allows max 5 overrides
-  reminderOverrides = reminderOverrides.slice(0, 5);
-
   const stepsToSync = project.steps.filter(s => !s.completed);
 
   if (stepsToSync.length === 0) {
     showToast('Alla steg är redan avklarade — inget att pusha.');
     return;
   }
+
+  // Map client color to Google Calendar colorId (1-11)
+  // Google Calendar event colors:
+  // 1=Lavender, 2=Sage, 3=Grape, 4=Flamingo, 5=Banana
+  // 6=Tangerine, 7=Peacock, 8=Graphite, 9=Blueberry, 10=Basil, 11=Tomato
+  const calColorMap = {
+    '#6c5ce7': '9',   // purple → Blueberry
+    '#00d2a0': '2',   // green → Sage
+    '#f0a030': '5',   // yellow/orange → Banana
+    '#ff4757': '11',  // red → Tomato
+    '#0abde3': '7',   // cyan → Peacock
+    '#e056a0': '4',   // pink → Flamingo
+    '#2ed573': '10',  // green → Basil
+    '#ffa502': '6',   // orange → Tangerine
+    '#a78bfa': '3',   // light purple → Grape
+    '#00b894': '2',   // teal → Sage
+    '#fd79a8': '4',   // pink → Flamingo
+    '#74b9ff': '1',   // light blue → Lavender
+    '#fdcb6e': '5',   // yellow → Banana
+    '#e17055': '6',   // orange → Tangerine
+    '#55efc4': '2',   // mint → Sage
+  };
+  const clientColor = client ? client.color : '#6c5ce7';
+  const calColorId = calColorMap[clientColor] || '9';
+
+  // Build reminder overrides for timed events
+  // "same day 09:00" = 0 min before (event IS at 09:00)
+  // "1 day before" = 1440 min
+  // "3 days before" = 4320 min
+  const reminderMinutesMap = {
+    'same': 0,
+    '1day': 1440,
+    '3days': 4320,
+    '7days': 10080,
+    '14days': 20160,
+  };
+
+  const selectedReminders = (project.reminders || ['same', '1day', '3days']);
+  let reminderOverrides = [];
+  selectedReminders.forEach(r => {
+    const mins = reminderMinutesMap[r];
+    if (mins !== undefined) {
+      reminderOverrides.push({ method: 'email', minutes: mins === 0 ? 0 : mins });
+    }
+  });
+  // Add popup for same-day
+  if (selectedReminders.includes('same')) {
+    reminderOverrides.push({ method: 'popup', minutes: 0 });
+  }
+  // Filter: Google requires minutes >= 0 and max 5 overrides, 0 is allowed for timed events
+  reminderOverrides = reminderOverrides.slice(0, 5);
 
   showToast(`📅 Pushar ${stepsToSync.length} events till Google Calendar...`);
 
@@ -2473,13 +2500,17 @@ async function pushProjectToGoogleCalendar(projectId) {
     const isDeadline = idx === project.steps.length - 1;
     const emoji = isDeadline ? '🎯 ' : '';
 
+    // Timed event at 09:00, 1 hour duration
+    const startDateTime = `${step.date}T09:00:00`;
+    const endDateTime = `${step.date}T10:00:00`;
+
     const event = {
       summary: `${emoji}${step.name} — ${clientName} (${project.name})`,
       description: `Projekt: ${project.name}\nKund: ${clientName}\nMall: ${project.templateName}\nSteg ${idx + 1} av ${project.steps.length}\n\n— Skapat av DeadlineFlow`,
-      start: { date: step.date },
-      end: { date: step.date },
+      start: { dateTime: startDateTime, timeZone: 'Europe/Stockholm' },
+      end: { dateTime: endDateTime, timeZone: 'Europe/Stockholm' },
       reminders: { useDefault: false, overrides: reminderOverrides },
-      colorId: isDeadline ? '11' : '1',
+      colorId: isDeadline ? '11' : calColorId,
     };
 
     try {
@@ -2554,3 +2585,4 @@ document.addEventListener('keydown', e => {
 </script>
 </body>
 </html>
+

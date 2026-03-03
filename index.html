@@ -949,9 +949,10 @@ function TemplatesView({data,onEdit,onDelete,onNew}){
 }
 
 // ===== PROFILE VIEW =====
-function ProfileView({authState,data,onDeleteProject,onResetPush,onLogout}){
+function ProfileView({authState,data,onDeleteProject,onResetPush,onLogout,aiKey,onAiKeyChange}){
   const [confirmDel,setConfirmDel]=useState(null);
   const [showPP,setShowPP]=useState(false);
+  const [showKey,setShowKey]=useState(false);
   return(
     <div style={{paddingBottom:80}}>
       {/* Account info */}
@@ -1025,6 +1026,30 @@ function ProfileView({authState,data,onDeleteProject,onResetPush,onLogout}){
           </div>
         );
       })}
+
+      {/* AI API Key */}
+      <div style={{background:C.bg3,border:`1px solid ${C.bd}`,borderRadius:12,padding:16,marginBottom:16}}>
+        <div onClick={()=>setShowKey(v=>!v)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:20}}>✨</span>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:C.t1}}>AI Quick Create</div>
+              <div style={{fontSize:12,color:aiKey?C.gn:C.t3}}>{aiKey?"Nyckel sparad ✓":"Lägg till API-nyckel"}</div>
+            </div>
+          </div>
+          <span style={{fontSize:10,color:C.t3,transform:showKey?"rotate(180deg)":"rotate(0)",transition:"transform .2s",display:"inline-block"}}>▼</span>
+        </div>
+        {showKey&&(
+          <div style={{marginTop:12}}>
+            <p style={{fontSize:12,color:C.t3,marginBottom:8,lineHeight:1.5}}>Klistra in din Anthropic API-nyckel för att använda AI-funktionen. Nyckeln sparas krypterat i ditt konto.</p>
+            <input value={aiKey} onChange={e=>onAiKeyChange(e.target.value)}
+              placeholder="sk-ant-..."
+              type="password"
+              style={{width:"100%",padding:"12px 14px",background:C.bg2,border:`1px solid ${C.bd}`,borderRadius:8,color:C.t1,fontFamily:"monospace",fontSize:13,outline:"none"}}/>
+            <p style={{fontSize:11,color:C.t3,marginTop:6}}>Hämta din nyckel på <span style={{color:C.ac}}>console.anthropic.com</span></p>
+          </div>
+        )}
+      </div>
 
       {/* Logout */}
       <button onClick={onLogout}
@@ -1191,7 +1216,9 @@ function App(){
         setAuthState(info);
         const saved=await loadUserData(user.uid);
         if(saved&&saved.projects){
-          setData(saved);
+          if(saved.aiKey)setAiKey(saved.aiKey);
+          const {aiKey:_,...rest}=saved;
+          setData(rest);
           setShowOnboard(false);setShowCatPicker(false);
         }else{
           setShowOnboard(true);
@@ -1223,6 +1250,7 @@ function App(){
   const [aiText,setAiText]=useState("");
   const [aiLoading,setAiLoading]=useState(false);
   const [aiOpen,setAiOpen]=useState(false);
+  const [aiKey,setAiKey]=useState("");
 
   // Template modal
   const [tplOpen,setTplOpen]=useState(false);
@@ -1296,10 +1324,10 @@ function App(){
     if(!authState||authState.type==="test")return;
     if(saveTimer.current)clearTimeout(saveTimer.current);
     saveTimer.current=setTimeout(()=>{
-      saveUserData(authState.uid,data);
+      saveUserData(authState.uid,{...data,aiKey});
     },1000);
     return ()=>{if(saveTimer.current)clearTimeout(saveTimer.current)};
-  },[data,authState]);
+  },[data,authState,aiKey]);
 
   // Login handler — only used for test mode (real auth handled by onAuthStateChanged)
   const handleLogin=async(info)=>{
@@ -1337,6 +1365,7 @@ function App(){
   // === AI QUICK CREATE ===
   const aiParse=async()=>{
     if(!aiText.trim()||aiLoading)return;
+    if(!aiKey.trim()){msg("⚠️ Lägg till din Anthropic API-nyckel under Konto");return}
     setAiLoading(true);
     try{
       const tplList=data.templates.map(t=>`id:"${t.id}" name:"${t.name}" steps:${t.steps.length}`).join("\n");
@@ -1346,7 +1375,12 @@ function App(){
 
       const res=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",
-        headers:{"Content-Type":"application/json"},
+        headers:{
+          "Content-Type":"application/json",
+          "x-api-key":aiKey.trim(),
+          "anthropic-version":"2023-06-01",
+          "anthropic-dangerous-direct-browser-access":"true"
+        },
         body:JSON.stringify({
           model:"claude-sonnet-4-20250514",
           max_tokens:1000,
@@ -1402,7 +1436,7 @@ BARA JSON, inget annat.`}]
       msg("✨ AI fyllde i projektet!");
     }catch(e){
       console.error("AI parse error:",e);
-      msg("⚠️ Kunde inte tolka texten — fyll i manuellt");
+      msg("⚠️ Kunde inte tolka — kontrollera API-nyckeln eller försök igen");
     }
     setAiLoading(false);
   };
@@ -1527,7 +1561,7 @@ BARA JSON, inget annat.`}]
         {tab==="week"&&<WeekView data={data} onToggle={toggle}/>}
         {tab==="calendar"&&<CalendarOverview data={data} month={calOverviewMonth} setMonth={setCalOverviewMonth} onToggle={toggle} onPush={pushToGcal}/>}
         {tab==="templates"&&<TemplatesView data={data} onEdit={id=>openTpl(id)} onDelete={delTpl} onNew={()=>openTpl()}/>}
-        {tab==="profile"&&<ProfileView authState={authState} data={data} onDeleteProject={delProject} onResetPush={resetPush} onLogout={handleLogout}/>}
+        {tab==="profile"&&<ProfileView authState={authState} data={data} onDeleteProject={delProject} onResetPush={resetPush} onLogout={handleLogout} aiKey={aiKey} onAiKeyChange={setAiKey}/>}
       </div>
 
       {/* BOTTOM TAB BAR */}
@@ -1581,7 +1615,7 @@ BARA JSON, inget annat.`}]
                   <span style={{fontSize:20}}>✨</span>
                   <div style={{textAlign:"left"}}>
                     <div style={{fontSize:14,fontWeight:700,color:C.t1}}>Beskriv ditt projekt</div>
-                    <div style={{fontSize:12,color:C.t3}}>"TikTok för MMSports, deadline 17 april"</div>
+                    <div style={{fontSize:12,color:C.t3}}>{aiKey?"\"TikTok för MMSports, deadline 17 april\"":"Lägg till API-nyckel under Konto först"}</div>
                   </div>
                 </button>
               ):(

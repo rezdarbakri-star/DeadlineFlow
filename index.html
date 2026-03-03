@@ -670,6 +670,7 @@ function Onboarding({onDone}){
 @keyframes cursorMove{0%{right:-10px;top:50px;opacity:0}20%{opacity:1}100%{right:14px;top:30px;opacity:1}}
 @keyframes stepPop{0%{transform:scale(0);opacity:0}100%{transform:scale(1);opacity:1}}
 @keyframes sheetUp{0%{transform:translateY(100%)}100%{transform:translateY(0)}}
+@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 `}</style>
     </div>
   );
@@ -1219,6 +1220,9 @@ function App(){
   const [wizDragOver,setWizDragOver]=useState(null);
   const dragNavTimer=useRef(null);
   const [showPushPopup,setShowPushPopup]=useState(false);
+  const [aiText,setAiText]=useState("");
+  const [aiLoading,setAiLoading]=useState(false);
+  const [aiOpen,setAiOpen]=useState(false);
 
   // Template modal
   const [tplOpen,setTplOpen]=useState(false);
@@ -1324,10 +1328,83 @@ function App(){
   // === PROJECT CREATION ===
   const startWiz=()=>{
     setPClient("");setPTpl(data.templates[0]?.id||"");setPName("");setPDL("");setPSkipWknd(true);setShowColors(false);setClientFocus(false);
-    setPCustomSteps(null);setMovingIdx(-1);setWizDragOver(null);
+    setPCustomSteps(null);setMovingIdx(-1);setWizDragOver(null);setAiText("");setAiOpen(false);setAiLoading(false);
     const used=data.clients.map(c=>c.color);setPColor(CLIENT_COLORS.find(c=>!used.includes(c))||CLIENT_COLORS[0]);
     setCalMonth(new Date(new Date().getFullYear(),new Date().getMonth(),1));
     setWiz(true);
+  };
+
+  // === AI QUICK CREATE ===
+  const aiParse=async()=>{
+    if(!aiText.trim()||aiLoading)return;
+    setAiLoading(true);
+    try{
+      const tplList=data.templates.map(t=>`id:"${t.id}" name:"${t.name}" steps:${t.steps.length}`).join("\n");
+      const clientList=data.clients.map(c=>`name:"${c.name}"`).join(", ");
+      const today=new Date();
+      const yearHint=today.getFullYear();
+
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:1000,
+          messages:[{role:"user",content:`Du är en JSON-parser för en projektplaneringsapp. Tolka användarens text och returnera BARA JSON (ingen markdown, inga backticks).
+
+Tillgängliga mallar:
+${tplList}
+
+Befintliga kunder: ${clientList||"inga"}
+
+Dagens datum: ${iso(today)}
+År att anta om inget anges: ${yearHint}
+
+Användarens text: "${aiText}"
+
+Returnera JSON med exakt dessa fält:
+{"template_id":"...", "client":"...", "deadline":"YYYY-MM-DD", "project_name":"..."}
+
+Regler:
+- template_id: Matcha bästa mall baserat på nyckelord. Om ingen matchar, returnera ""
+- client: Kundens namn från texten. Om ingen nämns, returnera ""
+- deadline: Datumet i ISO-format. Tolka "17 april" som "${yearHint}-04-17", "om 2 veckor" relativt till dagens datum. Om inget datum nämns, returnera ""
+- project_name: Ett kort projektnamn baserat på beskrivningen (max 4 ord)
+
+BARA JSON, inget annat.`}]
+        })
+      });
+      const d=await res.json();
+      const text=d.content.map(i=>i.text||"").join("");
+      const clean=text.replace(/```json|```/g,"").trim();
+      const parsed=JSON.parse(clean);
+
+      // Apply parsed data
+      if(parsed.template_id){
+        const tpl=data.templates.find(t=>t.id===parsed.template_id);
+        if(tpl)setPTpl(parsed.template_id);
+      }
+      if(parsed.client)setPClient(parsed.client);
+      if(parsed.deadline){
+        setPDL(parsed.deadline);
+        const [y,m]=parsed.deadline.split("-");
+        setCalMonth(new Date(parseInt(y),parseInt(m)-1,1));
+      }
+      if(parsed.project_name)setPName(parsed.project_name);
+
+      // Match client color
+      if(parsed.client){
+        const existing=data.clients.find(c=>c.name.toLowerCase()===parsed.client.toLowerCase());
+        if(existing)setPColor(existing.color);
+      }
+
+      setAiOpen(false);
+      msg("✨ AI fyllde i projektet!");
+    }catch(e){
+      console.error("AI parse error:",e);
+      msg("⚠️ Kunde inte tolka texten — fyll i manuellt");
+    }
+    setAiLoading(false);
   };
 
   // Live preview — computed whenever inputs change
@@ -1495,6 +1572,46 @@ function App(){
           </div>
 
           <div style={{flex:1,overflowY:"auto",padding:"16px 20px"}}>
+
+            {/* AI QUICK CREATE */}
+            <div style={{marginBottom:16}}>
+              {!aiOpen?(
+                <button onClick={()=>setAiOpen(true)}
+                  style={{width:"100%",padding:"14px 18px",background:`linear-gradient(135deg,${C.ac}15,${C.ac}08)`,border:`1px solid ${C.ac}30`,borderRadius:12,cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontFamily:"inherit"}}>
+                  <span style={{fontSize:20}}>✨</span>
+                  <div style={{textAlign:"left"}}>
+                    <div style={{fontSize:14,fontWeight:700,color:C.t1}}>Beskriv ditt projekt</div>
+                    <div style={{fontSize:12,color:C.t3}}>"TikTok för MMSports, deadline 17 april"</div>
+                  </div>
+                </button>
+              ):(
+                <div style={{background:C.bg3,border:`1px solid ${C.ac}40`,borderRadius:12,padding:14,position:"relative"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                    <span style={{fontSize:16}}>✨</span>
+                    <span style={{fontSize:13,fontWeight:700,color:C.t1}}>Beskriv projektet</span>
+                    <span onClick={()=>{setAiOpen(false);setAiText("")}} style={{marginLeft:"auto",fontSize:12,color:C.t3,cursor:"pointer"}}>✕</span>
+                  </div>
+                  <textarea value={aiText} onChange={e=>setAiText(e.target.value)}
+                    placeholder={"T.ex:\n• TikTok video för MMSports, deadline 17 april\n• YouTube film åt Red Bull, klart 3 maj\n• Golvslipning Anderssons, 25 mars"}
+                    onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();aiParse()}}}
+                    style={{width:"100%",minHeight:80,padding:"12px 14px",background:C.bg2,border:`1px solid ${C.bd}`,borderRadius:8,color:C.t1,fontFamily:"inherit",fontSize:15,outline:"none",resize:"vertical",lineHeight:1.5}}/>
+                  <button onClick={aiParse} disabled={aiLoading||!aiText.trim()}
+                    style={{width:"100%",marginTop:8,padding:14,borderRadius:10,background:aiText.trim()?C.ac:C.bd,border:"none",color:aiText.trim()?"#fff":C.t3,fontSize:15,fontWeight:700,fontFamily:"inherit",cursor:aiText.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"all .2s"}}>
+                    {aiLoading?(<><span style={{display:"inline-block",width:16,height:16,border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin .6s linear infinite"}}/>Tolkar...</>):"✨ Skapa med AI"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* DIVIDER */}
+            {aiOpen&&(
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+                <div style={{flex:1,height:1,background:C.bd}}/>
+                <span style={{fontSize:11,color:C.t3}}>eller fyll i manuellt</span>
+                <div style={{flex:1,height:1,background:C.bd}}/>
+              </div>
+            )}
+
             {/* 1. CALENDAR — centered, primary */}
             <div style={{fontSize:14,fontWeight:600,color:C.t3,marginBottom:6}}>Välj deadline</div>
             <div style={{margin:"0 auto 12px"}}>
@@ -1664,6 +1781,15 @@ function App(){
                 {CLIENT_COLORS.map(c=>(
                   <div key={c} onClick={()=>{setPColor(c);setShowColors(false)}} style={{width:28,height:28,borderRadius:6,background:c,cursor:"pointer",border:pColor===c?"2px solid #fff":"2px solid transparent"}}/>
                 ))}
+              </div>
+            )}
+
+            {/* 3b. PROJECT NAME — optional override */}
+            {pName&&(
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:14,fontWeight:600,color:C.t3,marginBottom:6}}>Projektnamn</div>
+                <input value={pName} onChange={e=>setPName(e.target.value)} placeholder="Auto-genererat om tomt"
+                  style={{width:"100%",padding:"14px 16px",background:C.bg3,border:`1px solid ${C.bd}`,borderRadius:10,color:C.t1,fontFamily:"inherit",fontSize:16,outline:"none"}}/>
               </div>
             )}
 

@@ -1204,6 +1204,7 @@ function App(){
   const [showCatPicker,setShowCatPicker]=useState(false);
 
   const [data,setData]=useState({clients:[],templates:[],projects:[]});
+  const dataLoaded=useRef(false);
   const [tab,setTab]=useState("week");
   const [toast,setToast]=useState("");
   const [showOnboard,setShowOnboard]=useState(false);
@@ -1219,8 +1220,10 @@ function App(){
           if(saved.aiKey)setAiKey(saved.aiKey);
           const {aiKey:_,...rest}=saved;
           setData(rest);
+          dataLoaded.current=true;
           setShowOnboard(false);setShowCatPicker(false);
         }else{
+          dataLoaded.current=true;
           setShowOnboard(true);
         }
       }
@@ -1318,10 +1321,11 @@ function App(){
     else msg(`☁️ ${ok} uppgifter pushade till Google Calendar!`);
   },[upd,data,authState]);
 
-  // Cloud sync — save to Firestore on every change
+  // Cloud sync — save to Firestore on every change (only after data loaded)
   const saveTimer=useRef(null);
   useEffect(()=>{
     if(!authState||authState.type==="test")return;
+    if(!dataLoaded.current)return; // Don't save before data is loaded!
     if(saveTimer.current)clearTimeout(saveTimer.current);
     saveTimer.current=setTimeout(()=>{
       saveUserData(authState.uid,{...data,aiKey});

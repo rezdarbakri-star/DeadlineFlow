@@ -894,7 +894,7 @@ function ProjectsView({data,onDelete}){
 }
 
 // ===== TEMPLATES VIEW =====
-function TemplatesView({data,onEdit,onDelete,onNew}){
+function TemplatesView({data,onEdit,onDelete,onNew,onRestore}){
   const [collapsed,setCollapsed]=useState({});
   const toggle=id=>setCollapsed(c=>({...c,[id]:!c[id]}));
 
@@ -923,6 +923,15 @@ function TemplatesView({data,onEdit,onDelete,onNew}){
 
   return(
     <div style={{paddingBottom:80}}>
+      {data.templates.length===0&&(
+        <div style={{padding:"24px 20px",background:C.bg3,border:`1px dashed ${C.ac}50`,borderRadius:14,textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:28,marginBottom:6}}>📋</div>
+          <div style={{fontSize:16,fontWeight:700,color:C.t1,marginBottom:4}}>Inga mallar än</div>
+          <div style={{fontSize:13,color:C.t3,marginBottom:14}}>Hämta färdiga mallar eller skapa en egen</div>
+          <button onClick={onRestore} style={{width:"100%",padding:14,borderRadius:12,background:C.ac,border:"none",color:"#fff",fontSize:15,fontWeight:700,fontFamily:"inherit",cursor:"pointer",marginBottom:8}}>📥 Hämta standardmallar</button>
+          <button onClick={onNew} style={{width:"100%",padding:12,borderRadius:12,background:"transparent",border:`1px solid ${C.bd}`,color:C.t2,fontSize:14,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}>+ Skapa egen mall</button>
+        </div>
+      )}
       {groups.map(g=>{
         const isOpen=!collapsed[g.id];
         return(
@@ -950,7 +959,7 @@ function TemplatesView({data,onEdit,onDelete,onNew}){
 }
 
 // ===== PROFILE VIEW =====
-function ProfileView({authState,data,onDeleteProject,onResetPush,onLogout,aiKey,onAiKeyChange}){
+function ProfileView({authState,data,onDeleteProject,onResetPush,onLogout,aiKey,onAiKeyChange,syncInfo,syncError}){
   const [confirmDel,setConfirmDel]=useState(null);
   const [showPP,setShowPP]=useState(false);
   const [showKey,setShowKey]=useState(false);
@@ -1027,6 +1036,15 @@ function ProfileView({authState,data,onDeleteProject,onResetPush,onLogout,aiKey,
           </div>
         );
       })}
+
+      {/* SYNC STATUS */}
+      <div style={{background:C.bg3,border:`1px solid ${syncError?C.rd:C.bd}`,borderRadius:12,padding:16,marginBottom:16,fontSize:13,lineHeight:1.8}}>
+        <div style={{fontSize:14,fontWeight:700,color:C.t1,marginBottom:6}}>🔄 Synk-status <span style={{fontSize:11,fontWeight:500,color:C.t3}}>· version 2026-10-01c</span></div>
+        <div style={{color:C.t2}}>Inloggad som: <b>{authState?.type==="google"?"Google":authState?.type==="email"?"E-post":"Test (ingen synk!)"}</b>{authState?.email?` · ${authState.email}`:""}</div>
+        <div style={{color:C.t2}}>Mallar i appen nu: <b>{data.templates.length}</b></div>
+        <div style={{color:C.t2}}>Mallar vid inläsning: <b>{syncInfo?.loadedTpls??"–"}</b> {syncInfo?.loaded?`(kl ${syncInfo.loaded})`:""}</div>
+        <div style={{color:syncError?C.rd:C.gn,fontWeight:600}}>{syncError?`❌ Sparning misslyckas: ${syncError}`:syncInfo?.saved?`✅ Senast sparat kl ${syncInfo.saved}`:"Inget sparat än i denna session"}</div>
+      </div>
 
       {/* AI API Key */}
       <div style={{background:C.bg3,border:`1px solid ${C.bd}`,borderRadius:12,padding:16,marginBottom:16}}>
@@ -1228,6 +1246,7 @@ function App(){
   const [data,setData]=useState({clients:[],templates:[],projects:[]});
   const dataLoaded=useRef(false);
   const [syncError,setSyncError]=useState(null);
+  const [syncInfo,setSyncInfo]=useState({loaded:null,saved:null,loadedTpls:null});
   const [tab,setTab]=useState("week");
   const [toast,setToast]=useState("");
   const [showOnboard,setShowOnboard]=useState(false);
@@ -1239,16 +1258,22 @@ function App(){
         const info={type:user.providerData[0]?.providerId==="google.com"?"google":"email",email:user.email,uid:user.uid};
         setAuthState(info);
         const res=await loadUserData(user.uid);
+        let local=null;try{local=JSON.parse(localStorage.getItem("df_"+user.uid)||"null")}catch(e){}
+        const localHasData=local&&((local.templates||[]).length||(local.projects||[]).length);
         if(!res.ok){
-          // Could not reach Firebase — do NOT treat as new user, block saving
-          dataLoaded.current=false;
+          // Cloud unreachable — use local backup if we have one
           setSyncError(res.error);
+          if(localHasData){setData(local);dataLoaded.current=true}
           setShowOnboard(false);setShowCatPicker(false);
           setAuthLoading(false);
           return;
         }
         setSyncError(null);
-        const saved=res.data;
+        let saved=res.data;
+        if(localHasData&&(!saved||(local.updatedAt||0)>(saved.updatedAt||0)||!(saved.templates||[]).length)){
+          saved={...local,aiKey:saved?.aiKey||local.aiKey};
+        }
+        setSyncInfo(si=>({...si,loaded:new Date().toLocaleTimeString("sv-SE"),loadedTpls:saved&&saved.templates?saved.templates.length:0}));
         if(saved&&saved.projects){
           if(saved.aiKey)setAiKey(saved.aiKey);
           const {aiKey:_,...rest}=saved;
@@ -1301,7 +1326,7 @@ function App(){
   const [editTplId,setEditTplId]=useState(null);
 
   const msg=m=>{setToast(m);setTimeout(()=>setToast(""),3000)};
-  const upd=useCallback(fn=>{setData(d=>{const n=JSON.parse(JSON.stringify(d));fn(n);return n})},[]);
+  const upd=useCallback(fn=>{setData(d=>{const n=JSON.parse(JSON.stringify(d));fn(n);n.updatedAt=Date.now();return n})},[]);
   const toggle=useCallback((pid,si)=>{upd(d=>{const p=d.projects.find(x=>x.id===pid);if(p)p.steps[si].completed=!p.steps[si].completed})},[upd]);
 
   // Push unpushed future steps to Google Calendar
@@ -1360,6 +1385,13 @@ function App(){
     else msg(`☁️ ${ok} uppgifter pushade till Google Calendar!`);
   },[upd,data,authState]);
 
+  // Local backup — written instantly on every change
+  useEffect(()=>{
+    if(!authState||!dataLoaded.current)return;
+    const key=authState.type==="test"?"df_test":"df_"+authState.uid;
+    try{localStorage.setItem(key,JSON.stringify(data))}catch(e){}
+  },[data,authState]);
+
   // Cloud sync — save to Firestore on every change (only after data loaded)
   const saveTimer=useRef(null);
   useEffect(()=>{
@@ -1368,16 +1400,19 @@ function App(){
     if(!data.templates?.length&&!data.projects?.length&&!data.clients?.length)return; // Never overwrite with empty data
     if(saveTimer.current)clearTimeout(saveTimer.current);
     saveTimer.current=setTimeout(()=>{
-      saveUserData(authState.uid,{...data,aiKey}).then(r=>{if(!r.ok)setSyncError(r.error)});
-    },1000);
+      saveUserData(authState.uid,{...data,aiKey}).then(r=>{if(!r.ok)setSyncError(r.error);else{setSyncError(null);setSyncInfo(si=>({...si,saved:new Date().toLocaleTimeString("sv-SE")}))}});
+    },400);
     return ()=>{if(saveTimer.current)clearTimeout(saveTimer.current)};
   },[data,authState,aiKey]);
 
   // Login handler — only used for test mode (real auth handled by onAuthStateChanged)
   const handleLogin=async(info)=>{
     if(info.type==="test"){
+      let local=null;try{local=JSON.parse(localStorage.getItem("df_test")||"null")}catch(e){}
       setAuthState(info);
-      setShowOnboard(true);
+      if(local&&((local.templates||[]).length||(local.projects||[]).length)){
+        setData(local);dataLoaded.current=true;setShowOnboard(false);setShowCatPicker(false);
+      }else{dataLoaded.current=true;setShowOnboard(true)}
     }
     // For email/google: Firebase auth triggers onAuthStateChanged which loads data
   };
@@ -1605,8 +1640,8 @@ BARA JSON, inget annat.`}]
       <div style={{flex:1,overflowY:"auto",padding:"4px 16px 100px"}}>
         {tab==="week"&&<WeekView data={data} onToggle={toggle}/>}
         {tab==="calendar"&&<CalendarOverview data={data} month={calOverviewMonth} setMonth={setCalOverviewMonth} onToggle={toggle} onPush={pushToGcal}/>}
-        {tab==="templates"&&<TemplatesView data={data} onEdit={id=>openTpl(id)} onDelete={delTpl} onNew={()=>openTpl()}/>}
-        {tab==="profile"&&<ProfileView authState={authState} data={data} onDeleteProject={delProject} onResetPush={resetPush} onLogout={handleLogout} aiKey={aiKey} onAiKeyChange={setAiKey}/>}
+        {tab==="templates"&&<TemplatesView data={data} onEdit={id=>openTpl(id)} onDelete={delTpl} onNew={()=>openTpl()} onRestore={()=>setShowCatPicker(true)}/>}
+        {tab==="profile"&&<ProfileView authState={authState} data={data} onDeleteProject={delProject} onResetPush={resetPush} onLogout={handleLogout} aiKey={aiKey} onAiKeyChange={setAiKey} syncInfo={syncInfo} syncError={syncError}/>}
       </div>
 
       {/* BOTTOM TAB BAR */}

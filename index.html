@@ -125,12 +125,13 @@ const CLIENT_COLORS=["#6c5ce7","#00d2a0","#f0a030","#ff4757","#0abde3","#e056a0"
 const DAYS=["sön","mån","tis","ons","tor","fre","lör"];
 const MONTHS=["jan","feb","mar","apr","maj","jun","jul","aug","sep","okt","nov","dec"];
 const gid=()=>Date.now().toString(36)+Math.random().toString(36).substr(2,5);
-const iso=d=>d.toISOString().split("T")[0];
+const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const parseD=s=>{const [y,m,dd]=s.split("-").map(Number);return new Date(y,m-1,dd,12)};
 const fmtShort=s=>{const d=new Date(s);return`${d.getDate()} ${MONTHS[d.getMonth()]}`};
 const fmtDay=s=>DAYS[new Date(s).getDay()];
 const isToday=s=>s===iso(new Date());
 const isPast=s=>new Date(s)<new Date(iso(new Date()));
-const getWeekNum=s=>{const d=new Date(s);d.setHours(0,0,0,0);d.setDate(d.getDate()+3-(d.getDay()+6)%7);const w=new Date(d.getFullYear(),0,4);return 1+Math.round(((d-w)/864e5-3+(w.getDay()+6)%7)/7)};
+const getWeekNum=s=>{const d=parseD(s);d.setHours(0,0,0,0);d.setDate(d.getDate()+3-(d.getDay()+6)%7);const w=new Date(d.getFullYear(),0,4);return 1+Math.round(((d-w)/864e5-3+(w.getDay()+6)%7)/7)};
 function skipWknd(d){while(d.getDay()===0||d.getDay()===6)d.setDate(d.getDate()-1);return d}
 function skipWkndFwd(d){while(d.getDay()===0||d.getDay()===6)d.setDate(d.getDate()+1);return d}
 function subBizDays(d,n){let r=n;while(r>0){d.setDate(d.getDate()-1);if(d.getDay()!==0&&d.getDay()!==6)r--}return d}
@@ -140,7 +141,7 @@ function calcSteps(tpl,dl,skip=true){
   const post=tpl.steps.filter(s=>s.after);
   const st=[];
   // Pre-deadline steps (backward from deadline)
-  let c=new Date(dl);
+  let c=parseD(dl);
   if(skip)skipWknd(c);
   for(let i=pre.length-1;i>=0;i--){
     st.unshift({name:pre[i].name,date:iso(c),completed:false});
@@ -148,7 +149,7 @@ function calcSteps(tpl,dl,skip=true){
   }
   // Post-deadline steps (forward from deadline)
   if(post.length>0){
-    let p=new Date(dl);
+    let p=parseD(dl);
     for(let i=0;i<post.length;i++){
       if(skip)addBizDays(p,post[i].days);else p.setDate(p.getDate()+post[i].days);
       st.push({name:post[i].name,date:iso(p),completed:false,after:true});
@@ -1082,6 +1083,9 @@ function CalendarOverview({data,month,setMonth,onToggle,onPush}){
   const cells=[];
   for(let i=0;i<offset;i++)cells.push(null);
   for(let i=1;i<=dim;i++)cells.push(i);
+  while(cells.length%7)cells.push(null);
+  const weeks=[];for(let w=0;w<cells.length;w+=7)weeks.push(cells.slice(w,w+7));
+  const dsOf=d=>`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
 
   const [selDate,setSelDate]=useState(null);
   const selTasks=selDate?byDate[selDate]||[]:[];
@@ -1100,13 +1104,29 @@ function CalendarOverview({data,month,setMonth,onToggle,onPush}){
 
       {/* Calendar grid */}
       <div style={{background:C.bg3,border:`1px solid ${C.bd}`,borderRadius:12,padding:8,marginBottom:12}}>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",textAlign:"center",marginBottom:4}}>
-          {["M","T","O","T","F","L","S"].map((d,i)=><div key={d+i} style={{fontSize:9,fontWeight:700,color:i>=5?C.t3+"70":C.t3,padding:"4px 0"}}>{d}</div>)}
+        <div style={{display:"grid",gridTemplateColumns:"36px repeat(7,1fr)",textAlign:"center",marginBottom:2,paddingBottom:6,borderBottom:`2px solid ${C.bd}`}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.t3,padding:"4px 0",opacity:0.6}}>V</div>
+          {["Mån","Tis","Ons","Tor","Fre","Lör","Sön"].map((d,i)=><div key={d} style={{fontSize:11,fontWeight:700,color:i>=5?C.t3+"70":C.t3,padding:"4px 0"}}>{d}</div>)}
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
-          {cells.map((d,i)=>{
+        <div>
+          {weeks.map((wk,wi)=>{
+            const fd=wk.find(x=>x!==null);
+            const wn=getWeekNum(dsOf(fd));
+            const isCurWeek=wk.some(x=>x!==null&&dsOf(x)===todayStr);
+            const wkCount=wk.reduce((a,x)=>a+(x!==null?(byDate[dsOf(x)]||[]).filter(t=>!t.done).length:0),0);
+            return(
+            <div key={wi} style={{display:"grid",gridTemplateColumns:"36px repeat(7,1fr)",gap:3,alignItems:"stretch",padding:"5px 0",
+              borderTop:wi>0?`1px solid ${C.bd}`:"none",background:isCurWeek?C.ac+"10":"transparent",borderRadius:isCurWeek?8:0}}>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",borderRight:`1px solid ${isCurWeek?C.ac+"50":C.bd}`,
+                color:isCurWeek?C.ac:wkCount?C.t2:C.t3,opacity:isCurWeek||wkCount?1:0.55}}>
+                <span style={{fontSize:8,fontWeight:600,opacity:0.7,lineHeight:1}}>v.</span>
+                <span style={{fontSize:12,fontWeight:800,lineHeight:1.1}}>{wn}</span>
+                {wkCount>0&&<span style={{fontSize:8,fontWeight:700,marginTop:2,opacity:0.8}}>{wkCount} st</span>}
+              </div>
+          {wk.map((d,j)=>{
+            const i=wi*7+j;
             if(d===null)return <div key={i}/>;
-            const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+            const ds=dsOf(d);
             const dayTasks=byDate[ds]||[];
             const isTdy=ds===todayStr;
             const isSel=ds===selDate;
@@ -1116,10 +1136,10 @@ function CalendarOverview({data,month,setMonth,onToggle,onPush}){
               <div key={i} onClick={()=>setSelDate(ds===selDate?null:ds)}
                 style={{padding:"6px 2px 4px",borderRadius:8,cursor:"pointer",textAlign:"center",
                   opacity:isPast?0.3:1,
-                  background:isSel?C.ac+"20":isTdy?C.ac+"08":"transparent",
+                  background:isSel?C.ac+"20":isTdy?C.ac+"08":j>=5?C.t3+"12":"transparent",
                   border:isSel?`2px solid ${C.ac}`:isTdy?`2px solid ${C.ac}30`:"2px solid transparent",
-                  transition:"all .15s",minHeight:38}}>
-                <div style={{fontSize:12,fontWeight:isTdy||isSel?700:400,color:isPast?C.t3:isSel?C.ac:isTdy?C.ac:i%7>=5?C.t3:C.t1}}>{d}</div>
+                  transition:"all .15s",minHeight:44}}>
+                <div style={{fontSize:14,fontWeight:isTdy||isSel?700:400,color:isPast?C.t3:isSel?C.ac:isTdy?C.ac:j>=5?C.t3:C.t1}}>{d}</div>
                 {!isPast&&colors.length>0&&(
                   <div style={{display:"flex",gap:2,justifyContent:"center",marginTop:2,flexWrap:"wrap"}}>
                     {colors.slice(0,3).map((cl,ci)=><div key={ci} style={{width:5,height:5,borderRadius:"50%",background:cl}}/>)}
@@ -1128,6 +1148,8 @@ function CalendarOverview({data,month,setMonth,onToggle,onPush}){
                 )}
               </div>
             );
+          })}
+            </div>);
           })}
         </div>
       </div>
@@ -1688,12 +1710,13 @@ BARA JSON, inget annat.`}]
                   })()}
                 </div>
                 <div style={{padding:"8px 10px 10px"}}>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",textAlign:"center",marginBottom:4}}>
-                    {["M","T","O","T","F","L","S"].map((d,i)=>(
-                      <div key={d+i} style={{fontSize:11,fontWeight:700,color:i>=5?C.t3+"70":C.t3,padding:"4px 0"}}>{d}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"36px repeat(7,1fr)",textAlign:"center",marginBottom:2,paddingBottom:6,borderBottom:`2px solid ${C.bd}`}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.t3,padding:"4px 0",opacity:0.6}}>V</div>
+                    {["Mån","Tis","Ons","Tor","Fre","Lör","Sön"].map((d,i)=>(
+                      <div key={d} style={{fontSize:11,fontWeight:700,color:i>=5?C.t3+"70":C.t3,padding:"4px 0"}}>{d}</div>
                     ))}
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",textAlign:"center"}}>
+                  <div>
                     {(()=>{
                       const yr=calMonth.getFullYear(),mo=calMonth.getMonth();
                       const first=new Date(yr,mo,1).getDay();
@@ -1703,17 +1726,37 @@ BARA JSON, inget annat.`}]
                       const cells=[];
                       for(let i=0;i<offset;i++)cells.push(null);
                       for(let i=1;i<=dim;i++)cells.push(i);
+                      while(cells.length%7)cells.push(null);
+                      const weeks=[];for(let w=0;w<cells.length;w+=7)weeks.push(cells.slice(w,w+7));
+                      const dsOf=d=>`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
                       const stepMap={};// date -> {idx,name}
                       const dlIdx2=wizSteps?wizSteps.reduce((a,s,i)=>s.after?a:i,-1):-1;
                       if(wizSteps)wizSteps.forEach((s,idx)=>{stepMap[s.date]={idx,name:s.name,isLast:idx===dlIdx2,isAfter:!!s.after}});
-                      return cells.map((d,i)=>{
+                      return weeks.map((wk,wi)=>{
+                        const firstDay=wk.find(x=>x!==null);
+                        const wn=getWeekNum(dsOf(firstDay));
+                        const isCurWeek=wk.some(x=>x!==null&&dsOf(x)===todayStr);
+                        const wkHasSteps=wk.some(x=>x!==null&&stepMap[dsOf(x)]);
+                        return(
+                        <div key={wi} style={{display:"grid",gridTemplateColumns:"36px repeat(7,1fr)",textAlign:"center",alignItems:"stretch",gap:3,
+                          padding:"5px 0",borderTop:wi>0?`1px solid ${C.bd}`:"none",
+                          background:isCurWeek?C.ac+"10":"transparent",borderRadius:isCurWeek?8:0}}>
+                          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+                            fontSize:11,fontWeight:800,color:isCurWeek?C.ac:wkHasSteps?C.t2:C.t3,opacity:isCurWeek||wkHasSteps?1:0.55,
+                            borderRight:`1px solid ${isCurWeek?C.ac+"50":C.bd}`}}>
+                            <span style={{fontSize:8,fontWeight:600,opacity:0.7,lineHeight:1}}>v.</span>
+                            <span style={{lineHeight:1.1}}>{wn}</span>
+                          </div>
+                        {wk.map((d,j)=>{
+                        const i=wi*7+j;
                         if(d===null)return <div key={i}/>;
-                        const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+                        const ds=dsOf(d);
+                        const isTodayCell=ds===todayStr;
                         const isSel=pDL===ds;
                         const step=stepMap[ds];
                         const isStep=!!step&&!isSel;
                         const isPastDay=ds<todayStr;
-                        const isWknd=i%7===5||i%7===6;
+                        const isWknd=j>=5;
                         const stepInPast=isStep&&isPastDay;
                         const isDragTarget=wizDragOver===ds&&!isStep&&!isSel;
                         const isBeingMoved=movingIdx>=0&&step&&step.idx===movingIdx;
@@ -1738,8 +1781,8 @@ BARA JSON, inget annat.`}]
                             }}
                             style={{padding:"7px 2px",borderRadius:8,position:"relative",
                               cursor:isStep?"grab":isPastDay?"default":"pointer",
-                              background:isBeingMoved?C.ac+"35":isDragTarget?C.ac+"25":isSel?(isPastDay?C.rd+"40":C.ac):stepInPast?"rgba(255,71,87,.1)":isStep?(step.isAfter?C.gn+"25":wasCustomized?C.ac+"20":C.step+"30"):"transparent",
-                              border:isBeingMoved?`2px solid ${C.ac}`:isDragTarget?`2px dashed ${C.ac}`:"2px solid transparent",
+                              background:isBeingMoved?C.ac+"35":isDragTarget?C.ac+"25":isSel?(isPastDay?C.rd+"40":C.ac):stepInPast?"rgba(255,71,87,.1)":isStep?(step.isAfter?C.gn+"25":wasCustomized?C.ac+"20":C.step+"30"):isWknd?C.t3+"12":"transparent",
+                              border:isBeingMoved?`2px solid ${C.ac}`:isDragTarget?`2px dashed ${C.ac}`:isTodayCell&&!isSel?`2px solid ${C.ac}80`:"2px solid transparent",
                               transition:"all .15s",userSelect:"none"}}>
                             <div style={{fontSize:14,fontWeight:isSel||isStep||isDragTarget?700:400,
                               color:isBeingMoved?C.ac:isDragTarget?C.ac:isSel?(isPastDay?C.rd:"#fff"):stepInPast?C.rd+"80":isStep?(step.isAfter?C.gn:wasCustomized?C.ac:C.step):isPastDay?C.t3+"40":isWknd?C.t3+"70":C.t1}}>
@@ -1748,6 +1791,8 @@ BARA JSON, inget annat.`}]
                             {isStep&&<div style={{fontSize:8,fontWeight:700,color:step.isAfter?C.gn:wasCustomized?C.ac:C.step,lineHeight:1,marginTop:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%",padding:"0 2px"}}>{step.isAfter?"↪":""}{step.name.split(" ")[0]}</div>}
                           </div>
                         );
+                      })}
+                        </div>);
                       });
                     })()}
                   </div>
@@ -1942,9 +1987,18 @@ BARA JSON, inget annat.`}]
               style={{width:"100%",padding:"14px 16px",background:C.bg3,border:`1px solid ${C.bd}`,borderRadius:10,color:C.t1,fontFamily:"inherit",fontSize:16,outline:"none",marginBottom:20}}/>
 
             {/* PRE-DEADLINE STEPS */}
-            <div style={{fontSize:13,fontWeight:600,color:C.t2,marginBottom:8}}>Steg före deadline</div>
-            {tplSteps.filter(s=>!s.after).map((s,i)=>{
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+              <div style={{fontSize:13,fontWeight:600,color:C.t2}}>Steg före deadline</div>
+              <div onClick={()=>{
+                const pre=tplSteps.filter(s=>!s.after),post=tplSteps.filter(s=>s.after),n=pre.length;
+                const rev=pre.map((_,j)=>({...pre[n-1-j],days:j===0?0:pre[n-j].days}));
+                setTplSteps([...rev,...post]);
+              }} style={{fontSize:12,fontWeight:600,color:C.ac,cursor:"pointer",padding:"4px 8px",borderRadius:6,background:C.ac+"12"}}>⇅ Vänd ordning</div>
+            </div>
+            <div style={{fontSize:11,color:C.t3,marginBottom:10,lineHeight:1.5}}>Överst = första steget. Nederst = 🎯 deadline. Dagar = arbetsdagar efter steget ovanför.</div>
+            {tplSteps.filter(s=>!s.after).map((s,i,arr)=>{
               const realIdx=tplSteps.indexOf(s);
+              const isFirstPre=i===0,isDLPre=i===arr.length-1;
               return(
               <div key={realIdx}
                 draggable
@@ -1953,14 +2007,18 @@ BARA JSON, inget annat.`}]
                 onDrop={e=>{e.preventDefault();const from=parseInt(e.dataTransfer.getData("text/plain"));if(!isNaN(from)&&from!==realIdx&&!tplSteps[from].after===!tplSteps[realIdx].after){const n=[...tplSteps];const [moved]=n.splice(from,1);n.splice(realIdx,0,moved);setTplSteps(n)}}}
                 style={{display:"grid",gridTemplateColumns:"20px 1fr 56px 28px",alignItems:"center",gap:6,padding:"10px 12px",background:C.bg3,border:`1px solid ${C.bd}`,borderRadius:8,marginBottom:4,cursor:"grab"}}>
                 <span style={{fontSize:14,color:C.t3,cursor:"grab",userSelect:"none"}}>≡</span>
+                <div style={{display:"flex",alignItems:"center",gap:4,minWidth:0}}>
+                {isDLPre&&<span style={{fontSize:13}}>🎯</span>}
                 <input value={s.name} onChange={e=>{const n=[...tplSteps];n[realIdx]={...n[realIdx],name:e.target.value};setTplSteps(n)}} placeholder="Stegnamn..."
                   style={{background:"transparent",border:`1px solid transparent`,borderRadius:4,padding:"4px 6px",color:C.t1,fontFamily:"inherit",fontSize:14,outline:"none",transition:"border .15s"}}
                   onFocus={e=>e.target.style.borderColor=C.bd} onBlur={e=>e.target.style.borderColor="transparent"}/>
+                </div>
+                {isFirstPre?<div style={{fontSize:11,color:C.t3,textAlign:"center"}}>start</div>:
                 <div style={{display:"flex",alignItems:"center",gap:2}}>
                   <input type="number" min="0" value={s.days} onChange={e=>{const n=[...tplSteps];n[realIdx]={...n[realIdx],days:parseInt(e.target.value)||0};setTplSteps(n)}}
                     style={{background:C.bg4,border:`1px solid ${C.bd}`,borderRadius:4,padding:4,textAlign:"center",fontFamily:"monospace",fontSize:12,color:C.t1,width:"100%"}}/>
                   <span style={{fontSize:8,color:C.t3,whiteSpace:"nowrap"}}>d</span>
-                </div>
+                </div>}
                 <button onClick={()=>{const n=[...tplSteps];n.splice(realIdx,1);setTplSteps(n)}} style={{background:"none",border:"none",color:C.t3,cursor:"pointer",fontSize:14}}>✕</button>
               </div>
             )})}

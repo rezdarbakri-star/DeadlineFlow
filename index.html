@@ -1221,7 +1221,13 @@ function App(){
           const {aiKey:_,...rest}=saved;
           setData(rest);
           dataLoaded.current=true;
-          setShowOnboard(false);setShowCatPicker(false);
+          setShowOnboard(false);
+          // If templates got wiped, show category picker to restore them
+          if(!rest.templates||rest.templates.length===0){
+            setShowCatPicker(true);
+          }else{
+            setShowCatPicker(false);
+          }
         }else{
           dataLoaded.current=true;
           setShowOnboard(true);
